@@ -1,8 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { YouTubeAPI } from "@/lib/youtube-api"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const supabase = await createClient()
 
@@ -37,7 +37,17 @@ export async function POST(request: NextRequest) {
     }
 
     const youtube = new YouTubeAPI(youtubeApiKey)
-    const allVideos: any[] = []
+    const allVideos: Array<{
+      id: string
+      title: string
+      description: string
+      thumbnailUrl: string
+      channelName: string
+      publishedAt: string
+      duration: string
+      viewCount: number
+      sport_category?: string
+    }> = []
 
     // Fetch videos for each enabled sport
     for (const pref of preferences) {

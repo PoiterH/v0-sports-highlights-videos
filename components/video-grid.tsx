@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { YouTubeAPI } from "@/lib/youtube-api"
 import { Play, Clock, Eye, Search, Filter, Heart, EyeOff } from "lucide-react"
+import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
 
 interface Video {
@@ -52,7 +53,7 @@ export function VideoGrid() {
     loadUserInteractions()
   }, [])
 
-  const loadVideos = async () => {
+  const loadVideos = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("videos")
@@ -78,9 +79,9 @@ export function VideoGrid() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, toast])
 
-  const loadUserInteractions = async () => {
+  const loadUserInteractions = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -94,7 +95,7 @@ export function VideoGrid() {
     } catch (error) {
       console.error("Error loading interactions:", error)
     }
-  }
+  }, [supabase])
 
   const updateInteraction = async (videoId: string, field: keyof VideoInteraction, value: boolean) => {
     try {
@@ -264,10 +265,11 @@ export function VideoGrid() {
               className="group cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] overflow-hidden"
             >
               <div className="relative aspect-video overflow-hidden">
-                <img
+                <Image
                   src={video.thumbnail_url || "/placeholder.svg"}
                   alt={video.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                  fill
+                  className="object-cover group-hover:scale-105 transition-transform duration-200"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
                   <Button

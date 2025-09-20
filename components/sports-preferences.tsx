@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,7 +42,7 @@ export function SportsPreferences() {
     loadPreferences()
   }, [])
 
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -74,9 +74,9 @@ export function SportsPreferences() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, toast])
 
-  const createDefaultPreferences = async (userId: string) => {
+  const createDefaultPreferences = useCallback(async (userId: string) => {
     try {
       const defaultPrefs = DEFAULT_SPORTS.map((sport) => ({
         user_id: userId,
@@ -91,7 +91,7 @@ export function SportsPreferences() {
     } catch (error) {
       console.error("Error creating default preferences:", error)
     }
-  }
+  }, [supabase])
 
   const toggleSport = async (id: string, enabled: boolean) => {
     setSaving(true)
