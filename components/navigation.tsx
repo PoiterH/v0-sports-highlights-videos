@@ -3,13 +3,13 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Play, Settings, Home, LogOut } from "lucide-react"
+import { Play, Settings, Home, LogOut, MessageCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useState } from "react"
 
 interface NavigationProps {
   userEmail?: string
-  currentPage?: "home" | "preferences"
+  currentPage?: "home" | "preferences" | "chat"
 }
 
 export function Navigation({ userEmail, currentPage = "home" }: NavigationProps) {
@@ -39,6 +39,15 @@ export function Navigation({ userEmail, currentPage = "home" }: NavigationProps)
               <Button variant="outline" size="sm">
                 <Home className="h-4 w-4 mr-2" />
                 Home
+              </Button>
+            </Link>
+          )}
+
+          {currentPage !== "chat" && (
+            <Link href="/chat">
+              <Button variant="outline" size="sm">
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Chat Assistant
               </Button>
             </Link>
           )}
