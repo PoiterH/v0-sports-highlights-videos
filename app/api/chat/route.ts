@@ -2,6 +2,8 @@ import { SYSTEM_INSTRUCTIONS } from "@/components/agent/prompt";
 import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { TavilySearchApi } from "tavily";
 
 // Mock responses for when API is not available
 const MOCK_RESPONSES = [
@@ -40,10 +42,62 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
+    // Initialize Tavily search (optional - will work without API key in demo mode)
+    const tavily = new TavilySearchApi({
+      apiKey: process.env.TAVILY_API_KEY || "demo"
+    });
+
     const result = await generateText({
       model: openai("gpt-4o"),
       system: SYSTEM_INSTRUCTIONS,
       messages: aiMessages,
+      tools: {
+        web_search: {
+          description: 'Search the web for current sports information, news, scores, and statistics',
+          parameters: z.object({
+            query: z.string().describe('Search query for sports information - be specific about what sports data you need'),
+          }),
+          execute: async ({ query }) => {
+            try {
+              // If no Tavily API key, return mock search result
+              if (!process.env.TAVILY_API_KEY || process.env.TAVILY_API_KEY === "demo") {
+                return {
+                  results: [{
+                    title: "Sports Search Demo",
+                    content: `Demo search results for: "${query}". In production, this would return real-time sports data from the web. Configure TAVILY_API_KEY environment variable to enable live web search.`,
+                    url: "https://example.com/sports-demo"
+                  }]
+                };
+              }
+
+              const searchResult = await tavily.search({
+                query: query,
+                searchDepth: "basic",
+                includeImages: false,
+                includeAnswer: true,
+                maxResults: 5
+              });
+
+              return {
+                results: searchResult.results?.map(result => ({
+                  title: result.title,
+                  content: result.content,
+                  url: result.url
+                })) || []
+              };
+            } catch (error) {
+              console.error('Web search error:', error);
+              return {
+                results: [{
+                  title: "Search Error",
+                  content: `Unable to search for "${query}" at the moment. Please try again later.`,
+                  url: ""
+                }]
+              };
+            }
+          },
+        },
+      },
     });
 
     return NextResponse.json({

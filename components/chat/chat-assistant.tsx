@@ -140,7 +140,7 @@ export default function ChatAssistant() {
                         defaultOpen={toolCall.state === "output-available"}
                       >
                         <ToolHeader
-                          type={toolCall.type}
+                          type={toolCall.type as any}
                           state={toolCall.state as "input-available" | "output-available" | "running" | "error"}
                         />
                         <ToolContent>
