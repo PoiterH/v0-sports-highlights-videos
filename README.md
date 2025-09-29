@@ -1,13 +1,16 @@
-# Sports highlights videos from bootcamp
+# Starter App week 2 homework from bootcamp
 
 ## Overview
 
-I have moved the code from v0 and have made changes. It is not meant to be deployed on vercel as this is just a POC/assignment.
+Connect to vectorize service for RAG.  
+
 
 ## Deployment
 
 N/A
 
+## Known Issues
+1. RAG datasource is poor and just a test, will refine in the future.
 
 # Sports highlights videos from v0
 
