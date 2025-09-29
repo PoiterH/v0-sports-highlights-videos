@@ -1,4 +1,15 @@
-# Sports highlights videos
+# Sports highlights videos from bootcamp
+
+## Overview
+
+I have moved the code from v0 and have made changes. It is not meant to be deployed on vercel as this is just a POC/assignment.
+
+## Deployment
+
+N/A
+
+
+# Sports highlights videos from v0
 
 *Automatically synced with your [v0.app](https://v0.app) deployments*
 
