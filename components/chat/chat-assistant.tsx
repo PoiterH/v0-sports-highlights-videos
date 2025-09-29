@@ -81,6 +81,14 @@ export default function ChatAssistant() {
 
       const data = await response.json();
 
+      // Debug logging to see what we're receiving
+      console.log('=== FRONTEND RECEIVED DATA ===');
+      console.log('Full response data:', JSON.stringify(data, null, 2));
+      console.log('Sources:', data.sources);
+      console.log('ToolCalls:', data.toolCalls);
+      console.log('ToolCalls length:', data.toolCalls?.length);
+      console.log('=== END FRONTEND DEBUG ===');
+
       if (response.ok) {
         const assistantMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -89,6 +97,11 @@ export default function ChatAssistant() {
           sources: data.sources || [],
           toolCalls: data.toolCalls || [],
         };
+
+        console.log('=== ASSISTANT MESSAGE CREATED ===');
+        console.log('Assistant message:', JSON.stringify(assistantMessage, null, 2));
+        console.log('=== END ASSISTANT MESSAGE ===');
+
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
         throw new Error(data.error || "Failed to get response");
@@ -132,30 +145,45 @@ export default function ChatAssistant() {
                 <MessageContent>{message.content}</MessageContent>
 
                 {/* Display tool calls if available */}
+                {(() => {
+                  console.log(`=== RENDERING MESSAGE ${message.id} ===`);
+                  console.log('Message role:', message.role);
+                  console.log('Message toolCalls:', message.toolCalls);
+                  console.log('ToolCalls length:', message.toolCalls?.length);
+                  console.log('Should render toolCalls?', message.toolCalls && message.toolCalls.length > 0);
+                  console.log('=== END RENDER DEBUG ===');
+                  return null;
+                })()}
                 {message.toolCalls && message.toolCalls.length > 0 && (
                   <div className="mt-4">
-                    {message.toolCalls.map((toolCall, index) => (
-                      <Tool
-                        key={index}
-                        defaultOpen={toolCall.state === "output-available"}
-                      >
-                        <ToolHeader
-                          type={toolCall.type as any}
-                          state={toolCall.state as "input-available" | "output-available" | "running" | "error"}
-                        />
-                        <ToolContent>
-                          {toolCall.input && (
-                            <ToolInput input={toolCall.input} />
-                          )}
-                          {(toolCall.output || toolCall.errorText) && (
-                            <ToolOutput
-                              output={toolCall.output}
-                              errorText={toolCall.errorText}
-                            />
-                          )}
-                        </ToolContent>
-                      </Tool>
-                    ))}
+                    <div style={{ border: '2px solid red', padding: '10px', margin: '10px 0' }}>
+                      <strong>DEBUG: Tool calls section - {message.toolCalls.length} tool calls</strong>
+                    </div>
+                    {message.toolCalls.map((toolCall, index) => {
+                      console.log(`Rendering tool call ${index}:`, toolCall);
+                      return (
+                        <Tool
+                          key={index}
+                          defaultOpen={toolCall.state === "output-available"}
+                        >
+                          <ToolHeader
+                            type={toolCall.type as any}
+                            state={toolCall.state as "input-available" | "output-available" | "running" | "error"}
+                          />
+                          <ToolContent>
+                            {toolCall.input && (
+                              <ToolInput input={toolCall.input} />
+                            )}
+                            {(toolCall.output || toolCall.errorText) && (
+                              <ToolOutput
+                                output={toolCall.output}
+                                errorText={toolCall.errorText}
+                              />
+                            )}
+                          </ToolContent>
+                        </Tool>
+                      );
+                    })}
                   </div>
                 )}
 

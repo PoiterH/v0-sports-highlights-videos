@@ -3,7 +3,9 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { TavilySearchApi } from "tavily";
+import { TavilyClient } from "tavily";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 // Mock responses for when API is not available
 const MOCK_RESPONSES = [
@@ -15,6 +17,34 @@ const MOCK_RESPONSES = [
 
 export async function POST(request: NextRequest) {
   try {
+    // Authentication disabled for debugging
+    // const cookieStore = cookies();
+    // const supabase = createServerClient(
+    //   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    //   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    //   {
+    //     cookies: {
+    //       getAll() {
+    //         return cookieStore.getAll();
+    //       },
+    //       setAll(cookiesToSet) {
+    //         cookiesToSet.forEach(({ name, value, options }) =>
+    //           cookieStore.set(name, value, options)
+    //         );
+    //       },
+    //     },
+    //   }
+    // );
+
+    // const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    // if (authError || !user) {
+    //   return NextResponse.json(
+    //     { error: "Authentication required" },
+    //     { status: 401 }
+    //   );
+    // }
+
     const { messages } = await request.json();
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -38,12 +68,12 @@ export async function POST(request: NextRequest) {
 
     // Convert frontend message format to AI SDK format
     const aiMessages = messages.map((msg: { role: string; content: string }) => ({
-      role: msg.role,
+      role: msg.role as 'system' | 'user' | 'assistant',
       content: msg.content,
     }));
 
     // Initialize Tavily search (optional - will work without API key in demo mode)
-    const tavily = new TavilySearchApi({
+    const tavily = new TavilyClient({
       apiKey: process.env.TAVILY_API_KEY || "demo"
     });
 
@@ -54,7 +84,7 @@ export async function POST(request: NextRequest) {
       tools: {
         web_search: {
           description: 'Search the web for current sports information, news, scores, and statistics',
-          parameters: z.object({
+          inputSchema: z.object({
             query: z.string().describe('Search query for sports information - be specific about what sports data you need'),
           }),
           execute: async ({ query }) => {
@@ -72,10 +102,10 @@ export async function POST(request: NextRequest) {
 
               const searchResult = await tavily.search({
                 query: query,
-                searchDepth: "basic",
-                includeImages: false,
-                includeAnswer: true,
-                maxResults: 5
+                search_depth: "basic",
+                include_images: false,
+                include_answer: true,
+                max_results: 4
               });
 
               return {
@@ -100,11 +130,92 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      response: result.text,
-      sources: result.sources || [],
-      toolCalls: result.steps || [],
-    });
+    // Debug logging - log the complete result object
+    console.log('=== GENERATE TEXT RESULT ===');
+    console.log('Full result object:', JSON.stringify(result, null, 2));
+    console.log('Result text:', result.text);
+    console.log('Result sources:', result.sources);
+    console.log('Result steps:', result.steps);
+    console.log('Result toolCalls:', result.toolCalls);
+    console.log('Result toolResults:', result.toolResults);
+    console.log('=== END DEBUG ===');
+
+    // Extract sources from web search tool results
+    const extractedSources: Array<{ url: string; title?: string }> = [];
+
+    // Transform tool steps into the format expected by the frontend
+    const transformedToolCalls: Array<{
+      type: string;
+      state: string;
+      input?: string;
+      output?: string;
+      errorText?: string;
+    }> = [];
+
+    if (result.steps && Array.isArray(result.steps)) {
+      result.steps.forEach((step: any) => {
+        console.log('Processing step:', JSON.stringify(step, null, 2));
+
+        // Look for web_search tool calls in the step content
+        if (step.content && Array.isArray(step.content)) {
+          step.content.forEach((content: any) => {
+            if (content.type === 'tool-call' && content.toolName === 'web_search') {
+              console.log('Found tool-call:', content);
+
+              // Find the corresponding tool-result
+              const toolResult = step.content.find((c: any) =>
+                c.type === 'tool-result' && c.toolCallId === content.toolCallId
+              );
+
+              if (toolResult && toolResult.output?.results) {
+                console.log('Found tool results:', toolResult.output.results);
+
+                // Extract sources
+                toolResult.output.results.forEach((searchResult: any) => {
+                  if (searchResult.url && searchResult.url !== "https://example.com/sports-demo") {
+                    extractedSources.push({
+                      url: searchResult.url,
+                      title: searchResult.title || searchResult.url
+                    });
+                  }
+                });
+
+                // Transform for tool display
+                const toolCall = {
+                  type: "web_search",
+                  state: "output-available" as const,
+                  input: content.input?.query || JSON.stringify(content.input),
+                  output: toolResult.output.results
+                    .map((r: any) => `**${r.title}**\n${r.content}\n[${r.url}](${r.url})`)
+                    .join('\n\n'),
+                };
+
+                transformedToolCalls.push(toolCall);
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // If no text response but we have tool results, generate a response
+    let responseText = result.text;
+    if (!responseText && transformedToolCalls.length > 0) {
+      responseText = "I found some information for you. Please see the search results below.";
+    }
+
+    const responseData = {
+      response: responseText,
+      sources: extractedSources,
+      toolCalls: transformedToolCalls,
+    };
+
+    // Log the final response being sent to client
+    console.log('=== FINAL RESPONSE TO CLIENT ===');
+    console.log(JSON.stringify(responseData, null, 2));
+    console.log('=== END RESPONSE ===');
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("Chat API error:", error);
 
