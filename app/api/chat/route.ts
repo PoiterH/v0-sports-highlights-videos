@@ -82,46 +82,134 @@ export async function POST(request: NextRequest) {
       system: SYSTEM_INSTRUCTIONS,
       messages: aiMessages,
       tools: {
-        web_search: {
-          description: 'Search the web for current sports information, news, scores, and statistics',
+        // web_search: {
+        //   description: 'Search the web for current sports information, news, scores, and statistics',
+        //   inputSchema: z.object({
+        //     query: z.string().describe('Search query for sports information - be specific about what sports data you need'),
+        //   }),
+        //   execute: async ({ query }) => {
+        //     try {
+        //       // If no Tavily API key, return mock search result
+        //       if (!process.env.TAVILY_API_KEY || process.env.TAVILY_API_KEY === "demo") {
+        //         return {
+        //           results: [{
+        //             title: "Sports Search Demo",
+        //             content: `Demo search results for: "${query}". In production, this would return real-time sports data from the web. Configure TAVILY_API_KEY environment variable to enable live web search.`,
+        //             url: "https://example.com/sports-demo"
+        //           }]
+        //         };
+        //       }
+
+        //       const searchResult = await tavily.search({
+        //         query: query,
+        //         search_depth: "basic",
+        //         include_images: false,
+        //         include_answer: true,
+        //         max_results: 4
+        //       });
+
+        //       return {
+        //         results: searchResult.results?.map(result => ({
+        //           title: result.title,
+        //           content: result.content,
+        //           url: result.url
+        //         })) || []
+        //       };
+        //     } catch (error) {
+        //       console.error('Web search error:', error);
+        //       return {
+        //         results: [{
+        //           title: "Search Error",
+        //           content: `Unable to search for "${query}" at the moment. Please try again later.`,
+        //           url: ""
+        //         }]
+        //       };
+        //     }
+        //   },
+        // },
+        vectorize_search: {
+          description: 'Search your RAG knowledge base for sports highlights, analysis, and stored content',
           inputSchema: z.object({
-            query: z.string().describe('Search query for sports information - be specific about what sports data you need'),
+            question: z.string().describe('Question to search in the RAG knowledge base - be specific about sports content you need'),
+            numResults: z.number().optional().describe('Number of results to return (default: 5)'),
+            rerank: z.boolean().optional().describe('Whether to rerank results for better relevance (default: true)'),
           }),
-          execute: async ({ query }) => {
+          execute: async ({ question, numResults = 5, rerank = true }) => {
             try {
-              // If no Tavily API key, return mock search result
-              if (!process.env.TAVILY_API_KEY || process.env.TAVILY_API_KEY === "demo") {
+              // Check if Vectorize token is configured
+              const vectorizeToken = process.env.VECTORIZE_TOKEN;
+              if (!vectorizeToken || vectorizeToken === "demo") {
                 return {
                   results: [{
-                    title: "Sports Search Demo",
-                    content: `Demo search results for: "${query}". In production, this would return real-time sports data from the web. Configure TAVILY_API_KEY environment variable to enable live web search.`,
-                    url: "https://example.com/sports-demo"
+                    title: "RAG Search Demo",
+                    content: `Demo RAG search results for: "${question}". In production, this would search your vector knowledge base for stored sports content and analysis. Configure VECTORIZE_TOKEN environment variable to enable RAG search.`,
+                    score: 0.95,
+                    metadata: { source: "demo" }
                   }]
                 };
               }
 
-              const searchResult = await tavily.search({
-                query: query,
-                search_depth: "basic",
-                include_images: false,
-                include_answer: true,
-                max_results: 4
+              // Note: You need to replace these with your actual service-id and pipeline-id
+              const serviceId = process.env.VECTORIZE_SERVICE_ID || "your-service-id";
+              const pipelineId = process.env.VECTORIZE_PIPELINE_ID || "your-pipeline-id";
+
+              if (serviceId === "your-service-id" || pipelineId === "your-pipeline-id") {
+                return {
+                  results: [{
+                    title: "RAG Configuration Needed",
+                    content: `Please configure VECTORIZE_SERVICE_ID and VECTORIZE_PIPELINE_ID environment variables with your Vectorize service and pipeline IDs.`,
+                    score: 0.0,
+                    metadata: { source: "config-error" }
+                  }]
+                };
+              }
+
+
+              const vectorizeUrl = `https://api.vectorize.io/v1/org/${serviceId}/pipelines/${pipelineId}/retrieval`;
+
+              const response = await fetch(vectorizeUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${vectorizeToken}`
+                },
+                body: JSON.stringify({
+                  question,
+                  numResults,
+                  rerank
+                })
               });
 
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Vectorize API Error Details:', {
+                  status: response.status,
+                  statusText: response.statusText,
+                  errorText,
+                  url: vectorizeUrl
+                });
+                throw new Error(`Vectorize API error: ${response.status} ${response.statusText}. ${errorText}`);
+              }
+
+              const data = await response.json();
+
+              // Transform Vectorize response to consistent format
               return {
-                results: searchResult.results?.map(result => ({
-                  title: result.title,
-                  content: result.content,
-                  url: result.url
+                results: data.results?.map((result: any) => ({
+                  title: result.metadata?.title || result.metadata?.source || "Knowledge Base Result",
+                  content: result.content || result.text,
+                  score: result.score,
+                  metadata: result.metadata
                 })) || []
               };
             } catch (error) {
-              console.error('Web search error:', error);
+              console.error('Vectorize search error:', error);
               return {
                 results: [{
-                  title: "Search Error",
-                  content: `Unable to search for "${query}" at the moment. Please try again later.`,
-                  url: ""
+                  title: "RAG Search Error",
+                  content: `Unable to search knowledge base for "${question}" at the moment. Please try again later.`,
+                  score: 0.0,
+                  metadata: { source: error }
                 }]
               };
             }
@@ -156,10 +244,10 @@ export async function POST(request: NextRequest) {
       result.steps.forEach((step: any) => {
         console.log('Processing step:', JSON.stringify(step, null, 2));
 
-        // Look for web_search tool calls in the step content
+        // Look for tool calls in the step content
         if (step.content && Array.isArray(step.content)) {
           step.content.forEach((content: any) => {
-            if (content.type === 'tool-call' && content.toolName === 'web_search') {
+            if (content.type === 'tool-call' && (content.toolName === 'web_search' || content.toolName === 'vectorize_search')) {
               console.log('Found tool-call:', content);
 
               // Find the corresponding tool-result
@@ -170,27 +258,45 @@ export async function POST(request: NextRequest) {
               if (toolResult && toolResult.output?.results) {
                 console.log('Found tool results:', toolResult.output.results);
 
-                // Extract sources
-                toolResult.output.results.forEach((searchResult: any) => {
-                  if (searchResult.url && searchResult.url !== "https://example.com/sports-demo") {
-                    extractedSources.push({
-                      url: searchResult.url,
-                      title: searchResult.title || searchResult.url
-                    });
-                  }
-                });
+                if (content.toolName === 'web_search') {
+                  // Extract sources for web search
+                  toolResult.output.results.forEach((searchResult: any) => {
+                    if (searchResult.url && searchResult.url !== "https://example.com/sports-demo") {
+                      extractedSources.push({
+                        url: searchResult.url,
+                        title: searchResult.title || searchResult.url
+                      });
+                    }
+                  });
 
-                // Transform for tool display
-                const toolCall = {
-                  type: "web_search",
-                  state: "output-available" as const,
-                  input: content.input?.query || JSON.stringify(content.input),
-                  output: toolResult.output.results
-                    .map((r: any) => `**${r.title}**\n${r.content}\n[${r.url}](${r.url})`)
-                    .join('\n\n'),
-                };
+                  // Transform for web search tool display
+                  const toolCall = {
+                    type: "web_search",
+                    state: "output-available" as const,
+                    input: content.input?.query || JSON.stringify(content.input),
+                    output: toolResult.output.results
+                      .map((r: any) => `**${r.title}**\n${r.content}\n[${r.url}](${r.url})`)
+                      .join('\n\n'),
+                  };
 
-                transformedToolCalls.push(toolCall);
+                  transformedToolCalls.push(toolCall);
+                } else if (content.toolName === 'vectorize_search') {
+                  // Transform for vectorize search tool display
+                  const toolCall = {
+                    type: "vectorize_search",
+                    state: "output-available" as const,
+                    input: content.input?.question || JSON.stringify(content.input),
+                    output: toolResult.output.results
+                      .map((r: any) => {
+                        const score = r.score ? ` (Score: ${r.score.toFixed(3)})` : '';
+                        const metadata = r.metadata ? ` *Source: ${r.metadata.source || 'Knowledge Base'}*` : '';
+                        return `**${r.title}**${score}\n${r.content}${metadata}`;
+                      })
+                      .join('\n\n'),
+                  };
+
+                  transformedToolCalls.push(toolCall);
+                }
               }
             }
           });
